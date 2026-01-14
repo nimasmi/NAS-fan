@@ -1,7 +1,3 @@
-# This revision (3) is bad because it wakes the drives every 30 seconds, causes a power spike, and damages the drives, just to read the status of the drive.
-# This problem is fixed in revision 4.
-
-
 import subprocess
 import time
 import os
@@ -36,25 +32,37 @@ def get_max_temp():
 
     for drive in drives:
         try:
-            cmd = f"smartctl -n standby -A /dev/{drive}"
-            res = subprocess.check_output(cmd, shell=True, text=True, stderr=subprocess.DEVNULL)
+            # Stage 1: Check ONLY the power status.
+            # -i is fast and usually hits the OS cache, not the platters.
+            cmd_pw = f"smartctl -i -n standby /dev/{drive}"
+            proc = subprocess.run(cmd_pw, shell=True, text=True, capture_output=True)
+            
+            # If the drive is in STANDBY or a deep IDLE, smartctl tells us here.
+            output = proc.stdout.upper()
+            
+            # Logic: If it's in STANDBY or any IDLE state (like IDLE_B or IDLE_C),
+            # we consider it "Sleeping" for the sake of fan control to prevent spin-up.
+            if proc.returncode == 2 or "STANDBY" in output or "IDLE_C" in output or "IDLE_B" in output:
+                details.append(f"{drive}: ASLEEP")
+                continue 
+
+            # Stage 2: If it's truly ACTIVE or IDLE (platter spinning), get the temp.
+            awake_count += 1
+            cmd_temp = f"smartctl -A /dev/{drive}"
+            res_t = subprocess.check_output(cmd_temp, shell=True, text=True)
             
             drive_temp = None
-            for line in res.splitlines():
-                if "Temperature_Celsius" in line or "Temperature:" in line:
-                    parts = line.split()
-                    raw_val = parts[-1] if "Temperature:" in line else parts[9]
-                    drive_temp = int("".join(filter(str.isdigit, raw_val)))
+            for line in res_t.splitlines():
+                if "Temperature_Celsius" in line:
+                    drive_temp = int(line.split()[9])
                     if drive_temp > max_temp:
                         max_temp = drive_temp
-                    awake_count += 1
+                    break
             
-            if drive_temp:
-                details.append(f"{drive}: {drive_temp}C")
-            else:
-                details.append(f"{drive}: Awake")
-        except Exception:
-            details.append(f"{drive}: ASLEEP")
+            details.append(f"{drive}: {drive_temp}C" if drive_temp else f"{drive}: AWAKE")
+            
+        except Exception as e:
+            details.append(f"{drive}: ERR")
             
     return max_temp, awake_count, ", ".join(details)
 
