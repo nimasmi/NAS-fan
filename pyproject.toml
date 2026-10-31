@@ -1,0 +1,16 @@
+[project]
+name = "nas-fan"
+version = "0.1.0"
+description = "Fan control for the Titius NAS, driven by disk temperature"
+requires-python = ">=3.11"
+dependencies = []
+
+[dependency-groups]
+dev = [
+    "pytest>=8",
+    "mpremote==1.29.0",
+    "prek>=0.5.9",
+]
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
