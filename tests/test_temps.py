@@ -85,3 +85,20 @@ def test_discovery_reads_only_spinning_disks(monkeypatch):
     monkeypatch.setattr(temps, "_is_block_device", lambda path: True)
     monkeypatch.setattr(temps, "_is_rotational", lambda path: path == "/dev/sdb")
     assert temps.discover_drives(load_config({})) == ["/dev/sdb"]
+
+
+def test_a_labelled_entry_reads_the_path_and_keeps_the_label(monkeypatch):
+    from nas_fan import temps
+    from nas_fan.models import Reading
+
+    seen = []
+
+    def fake(device, timeout=15.0):
+        seen.append(device)
+        return Reading(device, 30, None)
+
+    cfg = load_config({"FAN_DRIVES": "disk20=/dev/sdx,disk22=/dev/sdy"})
+    monkeypatch.setattr(temps, "read_drive", fake)
+    readings = temps.read_all(cfg)
+    assert seen == ["/dev/sdx", "/dev/sdy"]
+    assert [r.label for r in readings] == ["disk20", "disk22"]

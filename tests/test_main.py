@@ -200,3 +200,38 @@ def test_a_log_file_without_a_directory_does_not_crash(tmp_path, monkeypatch):
     for handler in logger.handlers:
         handler.close()
     assert (tmp_path / "fan.log").read_text().strip().endswith("hello")
+
+
+LONG20 = "/dev/disk/by-id/ata-WDC_WD30EFRX-ABC1234_WD-WTRXF749V822"
+LONG22 = "/dev/disk/by-id/ata-WDC_WD40EFZX-ABC1234_WD-WW84AF6C3R5M"
+
+
+def test_status_line_uses_the_disk_label():
+    line = format_status(
+        38,
+        "ramp",
+        [Reading(LONG20, 39, None, "disk20"), Reading(LONG22, None, None, "disk22")],
+    )
+    assert line == 'speed=38% reason="ramp" disk20=39 disk22=asleep'
+
+
+def test_the_alert_names_the_labelled_disk():
+    calls = []
+
+    class Recording:
+        def notify(self, key, message, priority=4):
+            calls.append((key, message))
+            return True
+
+    run_cycle(
+        CFG,
+        FakeLink(),
+        Recording(),
+        read_all_fn=lambda cfg: [
+            Reading(LONG20, None, "timeout", "disk20"),
+            Reading(LONG22, 30, None, "disk22"),
+        ],
+    )
+    assert calls == [
+        ("fan-temps", "fan controller cannot read disk temperatures: disk20")
+    ]

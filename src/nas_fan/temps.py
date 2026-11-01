@@ -3,6 +3,7 @@ import os
 import re
 import stat
 import subprocess
+from dataclasses import replace
 
 from nas_fan.config import Config
 from nas_fan.models import Reading
@@ -89,5 +90,19 @@ def _smartctl(args: list[str], timeout: float) -> subprocess.CompletedProcess | 
         return Reading(args[-1], None, str(exc))
 
 
+def split_drive(entry: str) -> tuple[str, str]:
+    """Split a drive entry into a log label and a device path.
+
+    The configuration may say `disk20=/dev/disk/by-id/...`, which keeps the
+    log line short. An entry without `=` has no label.
+    """
+    label, sep, path = entry.partition("=")
+    return (label, path) if sep else ("", entry)
+
+
 def read_all(cfg: Config) -> list[Reading]:
-    return [read_drive(device) for device in discover_drives(cfg)]
+    readings = []
+    for entry in discover_drives(cfg):
+        label, path = split_drive(entry)
+        readings.append(replace(read_drive(path), label=label))
+    return readings

@@ -17,13 +17,18 @@ logger = logging.getLogger("nas_fan")
 SERIAL_ALERT_AFTER = 3
 
 
+def name_of(reading: Reading) -> str:
+    """The short name of a disk for log lines and alerts."""
+    return reading.label or os.path.basename(reading.device)
+
+
 def format_status(speed: int, reason: str, readings: Sequence[Reading]) -> str:
-    def label(reading: Reading) -> str:
+    def state(reading: Reading) -> str:
         if reading.temp is not None:
             return str(reading.temp)
         return "error" if reading.error else "asleep"
 
-    disks = " ".join(f"{os.path.basename(r.device)}={label(r)}" for r in readings)
+    disks = " ".join(f"{name_of(r)}={state(r)}" for r in readings)
     return f'speed={speed}% reason="{reason}" {disks}'.rstrip()
 
 
@@ -45,7 +50,7 @@ def run_cycle(
                 f"fan controller cannot reach the board: {exc}",
             )
 
-    failed = [r.device for r in readings if r.error]
+    failed = [name_of(r) for r in readings if r.error]
     if failed or not readings:
         detail = ", ".join(failed) if failed else "no disks found"
         alerter.notify(
